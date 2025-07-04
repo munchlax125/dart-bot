@@ -1,0 +1,38 @@
+/* static/css/style.css */
+/* 기존 index.html의 <style> 태그 안의 모든 내용과 동일 */
+/* ... (이전 코드의 style 태그 내용을 여기에 붙여넣기) ... */
+
+/* 추가적으로, formatter.py에서 새로 추가한 클래스에 대한 스타일을 정의합니다.
+  이렇게 하면 마크다운 변환 결과가 더 예쁘게 보입니다.
+*/
+.analysis-container h1, 
+.analysis-container h2, 
+.analysis-container h3 {
+    color: #667eea;
+    margin: 20px 0 10px 0;
+    font-weight: bold;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 8px;
+}
+.analysis-container h1 { font-size: 24px; }
+.analysis-container h2 { font-size: 20px; }
+.analysis-container h3 { font-size: 18px; }
+
+.analysis-container strong {
+    color: #764ba2;
+    font-weight: bold;
+}
+.analysis-container ul, .analysis-container ol {
+    padding-left: 25px;
+    margin: 15px 0;
+}
+.analysis-container li {
+    margin-bottom: 8px;
+}
+.analysis-container hr {
+    margin: 25px 0;
+    height: 2px;
+    background: #667eea;
+    border: none;
+    border-radius: 2px;
+}
