@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 DART + Gemini 사업보고서 분석 챗봇</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #667eea;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .search-section {
+            grid-column: 1 / -1;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
+        }
+
+        .company-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .company-item {
+            padding: 15px;
+            border-bottom: 1px solid #f1f3f4;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+        }
+
+        .company-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .company-item:last-child {
+            border-bottom: none;
+        }
+
+        .company-info {
+            flex-grow: 1;
+        }
+
+        .company-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .company-code {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .selected-company {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .analysis-section {
+            grid-column: 1 / -1;
+            display: none;
+        }
+
+        .analysis-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .result-area {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            min-height: 200px;
+            /* white-space: pre-wrap; 제거 - HTML 렌더링을 위해 */
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            line-height: 1.8;
+            max-height: 500px;
+            overflow-y: auto;
+            font-size: 14px;
+            color: #333;
+        }
+
+        /* HTML 스타일링 추가 */
+        .result-area h1, .result-area h2, .result-area h3 {
+            color: #667eea !important;
+            margin: 20px 0 10px 0 !important;
+            font-weight: bold !important;
+        }
+
+        .result-area h1 { font-size: 24px !important; }
+        .result-area h2 { font-size: 20px !important; }
+        .result-area h3 { font-size: 18px !important; }
+
+        .result-area strong {
+            color: #764ba2 !important;
+            font-weight: bold !important;
+        }
+
+        .result-area ul, .result-area ol {
+            padding-left: 20px !important;
+            margin: 10px 0 !important;
+        }
+
+        .result-area li {
+            margin: 5px 0 !important;
+            list-style-type: disc !important;
+        }
+
+        .result-area hr {
+            margin: 15px 0 !important;
+            border: 1px solid #dee2e6 !important;
+            border-top: 2px solid #667eea !important;
+        }
+
+        .chat-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-top: 30px;
+            display: none;
+        }
+
+        .chat-messages {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .message.user {
+            background: #667eea;
+            color: white;
+            margin-left: 50px;
+        }
+
+        .message.ai {
+            background: white;
+            border: 1px solid #e1e8ed;
+            margin-right: 50px;
+        }
+
+        .chat-input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex-grow: 1;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            display: none;
+        }
+
+        .success {
+            background: #51cf66;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .analysis-buttons {
+                grid-template-columns: 1fr;
+            }
+            
+            .chat-input-area {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 -->
+        <div class="header">
+            <h1>🔍 DART + Gemini 사업보고서 분석 챗봇</h1>
+            <p>한국 상장기업의 사업보고서를 자동으로 분석하고 회계감사 포인트를 제시하는 AI 챗봇</p>
+        </div>
+
+        <!-- 메인 콘텐츠 -->
+        <div class="main-content">
+            <!-- 회사 검색 섹션 -->
+            <div class="card search-section">
+                <h2>🏢 회사 검색</h2>
+                
+                <div class="form-group">
+                    <label for="companyName">회사명을 입력하세요</label>
+                    <input type="text" id="companyName" class="form-control" placeholder="예: 삼성전자">
+                </div>
+                
+                <button class="btn" onclick="searchCompany()">
+                    🔍 검색하기
+                </button>
+
+                <div id="searchResults" class="company-list" style="display: none;"></div>
+                <div id="selectedCompany" style="display: none;"></div>
+            </div>
+
+            <!-- 분석 섹션 -->
+            <div class="card analysis-section" id="analysisSection">
+                <h2>📊 분석 메뉴</h2>
+                
+                <div class="analysis-buttons">
+                    <button class="btn btn-secondary" onclick="getSimpleAnalysis()">
+                        📈 간단 분석
+                    </button>
+                    <button class="btn btn-warning" onclick="getAuditPoints()">
+                        ⚠️ 감사 유의사항
+                    </button>
+                </div>
+
+                <div id="analysisResult" class="result-area" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- AI 챗봇 섹션 -->
+        <div class="chat-section" id="chatSection">
+            <h2>🤖 AI 챗봇</h2>
+            <p>선택한 회사의 재무정보에 대해 자유롭게 질문해보세요!</p>
+            
+            <div id="chatMessages" class="chat-messages"></div>
+            
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" class="form-control chat-input" 
+                       placeholder="질문을 입력하세요..." onkeypress="handleChatKeyPress(event)">
+                <button class="btn btn-success" onclick="sendChatMessage()">
+                    💬 전송
+                </button>
+            </div>
+        </div>
+
+        <!-- 로딩 인디케이터 -->
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>처리 중입니다...</p>
+        </div>
+
+        <!-- 알림 메시지 -->
+        <div id="errorMsg" class="error"></div>
+        <div id="successMsg" class="success"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+    <script>
+        let currentCompany = null;
+
+        // 마크다운을 HTML로 변환
+        function renderMarkdown(text) {
+            // 간단한 마크다운 변환
+            return text
+                // 헤딩 변환
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                // 볼드 텍스트
+                .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+                // 리스트
+                .replace(/^\* (.*$)/gim, '<li>$1</li>')
+                .replace(/^- (.*$)/gim, '<li>$1</li>')
+                // 숫자 리스트
+                .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
+                // 구분선
+                .replace(/^={3,}$/gim, '<hr>')
+                .replace(/^-{3,}$/gim, '<hr>')
+                // 줄바꿈
+                .replace(/\n/g, '<br>');
+        }
+
+        // 분석 결과 표시 (완전 HTML 렌더링)
+        function displayAnalysisResult(title, content) {
+            const resultDiv = document.getElementById('analysisResult');
+            
+            resultDiv.innerHTML = `
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 20px; font-weight: bold;">${title}</h3>
+                    <hr style="margin: 15px 0; border: none; border-top: 2px solid #667eea;">
+                </div>
+                <div class="analysis-content">
+                    ${content}
+                </div>
+            `;
+            
+            resultDiv.style.display = 'block';
+            
+            // 결과 영역으로 스크롤
+            resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 에러 메시지 표시
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMsg');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // 성공 메시지 표시
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMsg');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        // 로딩 표시/숨김
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // 회사 검색
+        async function searchCompany() {
+            const companyName = document.getElementById('companyName').value.trim();
+            
+            if (!companyName) {
+                showError('회사명을 입력해주세요.');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ company_name: companyName })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displaySearchResults(data.companies);
+                } else {
+                    showError(data.error || '검색 중 오류가 발생했습니다.');
+                }
+            } catch (error) {
+                showError('네트워크 오류가 발생했습니다.');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 검색 결과 표시
+        function displaySearchResults(companies) {
+            const resultsDiv = document.getElementById('searchResults');
+            
+            if (companies.length === 0) {
+                resultsDiv.innerHTML = '<p style="padding: 20px; text-align: center; color: #666;">검색된 회사가 없습니다.</p>';
+            } else {
+                resultsDiv.innerHTML = companies.map(company => `
+                    <div class="company-item" onclick="selectCompany('${company.corp_code}', '${company.corp_name}', '${company.stock_code}')">
+                        <div class="company-info">
+                            <div class="company-name">${company.corp_name}</div>
+                            <div class="company-code">주식코드: ${company.stock_code || 'N/A'}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            resultsDiv.style.display = 'block';
+        }
+
+        // 회사 선택
+        async function selectCompany(corpCode, corpName, stockCode) {
+            showLoading();
+
+            try {
+                const response = await fetch('/api/select', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        corp_code: corpCode, 
+                        corp_name: corpName, 
+                        stock_code: stockCode 
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentCompany = data.company;
+                    showSelectedCompany(corpName, stockCode);
+                    showAnalysisSection();
+                    showChatSection();
+                    showSuccess(`${corpName} 선택 완료!`);
+                } else {
+                    showError(data.error || '회사 선택 중 오류가 발생했습니다.');
+                }
+            } catch (error) {
+                showError('네트워크 오류가 발생했습니다.');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 선택된 회사 표시
+        function showSelectedCompany(corpName, stockCode) {
+            const selectedDiv = document.getElementById('selectedCompany');
+            selectedDiv.innerHTML = `
+                <div class="selected-company">
+                    <h3>✅ 선택된 회사</h3>
+                    <p><strong>${corpName}</strong> (${stockCode || 'N/A'})</p>
+                </div>
+            `;
+            selectedDiv.style.display = 'block';
+            
+            // 검색 결과 숨기기
+            document.getElementById('searchResults').style.display = 'none';
+        }
+
+        // 분석 섹션 표시
+        function showAnalysisSection() {
+            document.getElementById('analysisSection').style.display = 'block';
+        }
+
+        // 챗봇 섹션 표시
+        function showChatSection() {
+            document.getElementById('chatSection').style.display = 'block';
+        }
+
+        // 간단 분석
+        async function getSimpleAnalysis() {
+            if (!currentCompany) {
+                showError('먼저 회사를 선택해주세요.');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch('/api/simple-analysis');
+                const data = await response.json();
+
+                if (data.success) {
+                    displayAnalysisResult(`📊 ${data.company} 간단 분석 결과`, data.analysis);
+                } else {
+                    showError(data.error || '분석 중 오류가 발생했습니다.');
+                }
+            } catch (error) {
+                showError('네트워크 오류가 발생했습니다.');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 감사 유의사항
+        async function getAuditPoints() {
+            if (!currentCompany) {
+                showError('먼저 회사를 선택해주세요.');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch('/api/audit-points');
+                const data = await response.json();
+
+                if (data.success) {
+                    displayAnalysisResult(`⚠️ ${data.company} 회계감사 유의사항`, data.analysis);
+                } else {
+                    showError(data.error || '분석 중 오류가 발생했습니다.');
+                }
+            } catch (error) {
+                showError('네트워크 오류가 발생했습니다.');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 분석 결과 표시
+        function displayAnalysisResult(title, content) {
+            const resultDiv = document.getElementById('analysisResult');
+            resultDiv.innerHTML = `<h3>${title}</h3>\n${'='.repeat(50)}\n\n${content}`;
+            resultDiv.style.display = 'block';
+            
+            // 결과 영역으로 스크롤
+            resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 챗봇 메시지 전송
+        async function sendChatMessage() {
+            if (!currentCompany) {
+                showError('먼저 회사를 선택해주세요.');
+                return;
+            }
+
+            const chatInput = document.getElementById('chatInput');
+            const question = chatInput.value.trim();
+
+            if (!question) {
+                showError('질문을 입력해주세요.');
+                return;
+            }
+
+            // 사용자 메시지 추가
+            addChatMessage('user', question);
+            chatInput.value = '';
+
+            // AI 응답 대기 메시지
+            const loadingMessageId = addChatMessage('ai', '🤖 답변을 생성하고 있습니다...');
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+
+                const data = await response.json();
+
+                // 로딩 메시지 제거
+                removeLoadingMessage(loadingMessageId);
+
+                if (data.success) {
+                    addChatMessage('ai', data.answer);
+                } else {
+                    addChatMessage('ai', `❌ 오류: ${data.error}`);
+                }
+            } catch (error) {
+                removeLoadingMessage(loadingMessageId);
+                addChatMessage('ai', '❌ 네트워크 오류가 발생했습니다.');
+            }
+        }
+
+        // 챗봇 메시지 추가 (HTML 지원)
+        function addChatMessage(sender, message) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageId = 'msg_' + Date.now();
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            messageDiv.id = messageId;
+            messageDiv.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 8px; font-size: 13px;">
+                    ${sender === 'user' ? '👤 사용자' : '🤖 AI 어시스턴트'}
+                </div>
+                <div style="line-height: 1.6;">${message}</div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            return messageId;
+        }
+
+        // 로딩 메시지 제거
+        function removeLoadingMessage(messageId) {
+            const messageElement = document.getElementById(messageId);
+            if (messageElement) {
+                messageElement.remove();
+            }
+        }
+
+        // 챗봇 입력 엔터키 처리
+        function handleChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendChatMessage();
+            }
+        }
+
+        // 페이지 로드 시 초기화
+        window.addEventListener('load', function() {
+            // 회사명 입력 필드에서 엔터키 처리
+            document.getElementById('companyName').addEventListener('keypress', function(event) {
+                if (event.key === 'Enter') {
+                    searchCompany();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
