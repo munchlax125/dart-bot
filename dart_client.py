@@ -1,4 +1,4 @@
-# dart_client.py - 향상된 버전
+# dart_client.py
 import requests
 import xml.etree.ElementTree as ET
 import zipfile
@@ -61,10 +61,6 @@ class DARTClient:
         """재무제표 정보 조회 (연결 -> 개별 순차 조회)"""
         logger.info(f"재무제표 조회 시작: {corp_code}, {year}년")
         
-        # 먼저 해당 연도의 사업보고서가 있는지 확인
-        if not self._check_business_report_exists(corp_code, year):
-            raise DARTApiException(f"{year}년도 사업보고서가 제출되지 않았습니다.")
-        
         for fs_div in ['CFS', 'OFS']:  # 연결(CFS) 먼저, 없으면 개별(OFS)
             params = {
                 'crtfc_key': self.api_key, 
@@ -94,46 +90,24 @@ class DARTClient:
         # 모든 시도 실패
         raise DARTApiException(f"{year}년도 재무제표 데이터를 찾을 수 없습니다.")
 
-    def _check_business_report_exists(self, corp_code: str, year: str) -> bool:
-        """사업보고서 존재 여부 확인"""
-        try:
-            # 공시목록 조회로 사업보고서 존재 확인
-            params = {
-                'crtfc_key': self.api_key,
-                'corp_code': corp_code,
-                'bgn_de': f"{year}0101",
-                'end_de': f"{int(year)+1}0430",  # 다음해 4월까지 (제출기한 고려)
-                'pblntf_ty': 'A',  # 정기공시
-                'page_count': 100
-            }
-            
-            response = self._request_get(f"{self.base_url}/list.json", params)
-            result = response.json()
-            
-            if result.get('status') == '000' and result.get('list'):
-                # 사업보고서 존재 확인
-                for item in result['list']:
-                    if '사업보고서' in item.get('report_nm', ''):
-                        logger.info(f"{year}년 사업보고서 확인됨")
-                        return True
-            
-            logger.warning(f"{year}년 사업보고서 미확인")
-            return False
-            
-        except Exception as e:
-            logger.warning(f"사업보고서 존재 확인 실패: {e}")
-            return True  # 확인 실패 시 일단 시도해보기
-
     def _extract_zip_content(self, content: bytes) -> bytes:
         """ZIP 파일 압축 해제"""
-        if content.startswith(b'PK'):
-            with zipfile.ZipFile(io.BytesIO(content)) as zf:
-                return zf.read(zf.namelist()[0])
-        return content
+        try:
+            if content.startswith(b'PK'):
+                with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                    return zf.read(zf.namelist()[0])
+            return content
+        except Exception as e:
+            logger.error(f"ZIP 압축 해제 오류: {e}")
+            return content
 
     def _decode_content(self, content: bytes) -> str:
         """콘텐츠 인코딩 처리"""
         try:
             return content.decode('utf-8')
         except UnicodeDecodeError:
-            return content.decode('euc-kr')
+            try:
+                return content.decode('euc-kr')
+            except UnicodeDecodeError:
+                logger.error("콘텐츠 디코딩 실패")
+                return content.decode('utf-8', errors='ignore')
