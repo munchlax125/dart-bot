@@ -125,16 +125,20 @@
             transform: none;
         }
 
-        .btn-secondary {
+        .btn-business {
+            background: linear-gradient(135deg, #fd79a8 0%, #e84393 100%);
+        }
+
+        .btn-financial {
             background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+        }
+
+        .btn-audit {
+            background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
         }
 
         .btn-success {
             background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
-        }
-
-        .btn-warning {
-            background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
         }
 
         .company-list {
@@ -204,7 +208,6 @@
             border-radius: 8px;
             padding: 20px;
             min-height: 200px;
-            /* white-space: pre-wrap; 제거 - HTML 렌더링을 위해 */
             font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
             line-height: 1.8;
             max-height: 500px;
@@ -382,11 +385,14 @@
                 <h2>📊 분석 메뉴</h2>
                 
                 <div class="analysis-buttons">
-                    <button class="btn btn-secondary" onclick="getSimpleAnalysis()">
-                        📈 간단 분석
+                    <button class="btn btn-business" onclick="getBusinessAnalysis()">
+                        🏢 사업분석
                     </button>
-                    <button class="btn btn-warning" onclick="getAuditPoints()">
-                        ⚠️ 감사 유의사항
+                    <button class="btn btn-financial" onclick="getFinancialAnalysis()">
+                        📈 재무분석
+                    </button>
+                    <button class="btn btn-audit" onclick="getAuditPoints()">
+                        ⚠️ 감사 시 유의사항
                     </button>
                 </div>
 
@@ -421,52 +427,8 @@
         <div id="successMsg" class="success"></div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
     <script>
         let currentCompany = null;
-
-        // 마크다운을 HTML로 변환
-        function renderMarkdown(text) {
-            // 간단한 마크다운 변환
-            return text
-                // 헤딩 변환
-                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-                // 볼드 텍스트
-                .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-                // 리스트
-                .replace(/^\* (.*$)/gim, '<li>$1</li>')
-                .replace(/^- (.*$)/gim, '<li>$1</li>')
-                // 숫자 리스트
-                .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
-                // 구분선
-                .replace(/^={3,}$/gim, '<hr>')
-                .replace(/^-{3,}$/gim, '<hr>')
-                // 줄바꿈
-                .replace(/\n/g, '<br>');
-        }
-
-        // 분석 결과 표시 (완전 HTML 렌더링)
-        function displayAnalysisResult(title, content) {
-            const resultDiv = document.getElementById('analysisResult');
-            
-            resultDiv.innerHTML = `
-                <div style="margin-bottom: 20px;">
-                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 20px; font-weight: bold;">${title}</h3>
-                    <hr style="margin: 15px 0; border: none; border-top: 2px solid #667eea;">
-                </div>
-                <div class="analysis-content">
-                    ${content}
-                </div>
-            `;
-            
-            resultDiv.style.display = 'block';
-            
-            // 결과 영역으로 스크롤
-            resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
 
         // 에러 메시지 표시
         function showError(message) {
@@ -611,8 +573,8 @@
             document.getElementById('chatSection').style.display = 'block';
         }
 
-        // 간단 분석
-        async function getSimpleAnalysis() {
+        // 사업분석
+        async function getBusinessAnalysis() {
             if (!currentCompany) {
                 showError('먼저 회사를 선택해주세요.');
                 return;
@@ -621,13 +583,38 @@
             showLoading();
 
             try {
-                const response = await fetch('/api/simple-analysis');
+                const response = await fetch('/api/business-analysis');
                 const data = await response.json();
 
                 if (data.success) {
-                    displayAnalysisResult(`📊 ${data.company} 간단 분석 결과`, data.analysis);
+                    displayAnalysisResult(`🏢 ${data.company} 사업분석 결과`, data.analysis);
                 } else {
-                    showError(data.error || '분석 중 오류가 발생했습니다.');
+                    showError(data.error || '사업분석 중 오류가 발생했습니다.');
+                }
+            } catch (error) {
+                showError('네트워크 오류가 발생했습니다.');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 재무분석
+        async function getFinancialAnalysis() {
+            if (!currentCompany) {
+                showError('먼저 회사를 선택해주세요.');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch('/api/financial-analysis');
+                const data = await response.json();
+
+                if (data.success) {
+                    displayAnalysisResult(`📈 ${data.company} 재무분석 결과`, data.analysis);
+                } else {
+                    showError(data.error || '재무분석 중 오류가 발생했습니다.');
                 }
             } catch (error) {
                 showError('네트워크 오류가 발생했습니다.');
@@ -661,10 +648,20 @@
             }
         }
 
-        // 분석 결과 표시
+        // 분석 결과 표시 (HTML 렌더링)
         function displayAnalysisResult(title, content) {
             const resultDiv = document.getElementById('analysisResult');
-            resultDiv.innerHTML = `<h3>${title}</h3>\n${'='.repeat(50)}\n\n${content}`;
+            
+            resultDiv.innerHTML = `
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 20px; font-weight: bold;">${title}</h3>
+                    <hr style="margin: 15px 0; border: none; border-top: 2px solid #667eea;">
+                </div>
+                <div class="analysis-content">
+                    ${content}
+                </div>
+            `;
+            
             resultDiv.style.display = 'block';
             
             // 결과 영역으로 스크롤

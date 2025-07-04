@@ -128,9 +128,9 @@ def select_company():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/simple-analysis', methods=['GET'])
-def get_simple_analysis():
-    """간단 분석 API"""
+@app.route('/api/business-analysis', methods=['GET'])
+def get_business_analysis():
+    """사업분석 API"""
     try:
         # 유효성 검사
         if current_company is None or current_financial_data is None:
@@ -140,10 +140,10 @@ def get_simple_analysis():
             initialize_clients()
         
         # 로그 기록
-        log_api_call("SIMPLE_ANALYSIS", current_company.corp_name)
+        log_api_call("BUSINESS_ANALYSIS", current_company.corp_name)
         
         # AI 분석 실행
-        analysis = gemini_analyzer.simple_analysis(
+        analysis = gemini_analyzer.business_analysis(
             current_company.corp_name, 
             current_financial_data
         )
@@ -158,7 +158,43 @@ def get_simple_analysis():
         })
         
     except Exception as e:
-        log_api_call("SIMPLE_ANALYSIS", 
+        log_api_call("BUSINESS_ANALYSIS", 
+                    current_company.corp_name if current_company else "", 
+                    "error")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/financial-analysis', methods=['GET'])
+def get_financial_analysis():
+    """재무분석 API (기존 간단 분석을 개선)"""
+    try:
+        # 유효성 검사
+        if current_company is None or current_financial_data is None:
+            return jsonify({'error': '먼저 회사를 선택해주세요.'}), 400
+        
+        if gemini_analyzer is None:
+            initialize_clients()
+        
+        # 로그 기록
+        log_api_call("FINANCIAL_ANALYSIS", current_company.corp_name)
+        
+        # AI 분석 실행
+        analysis = gemini_analyzer.financial_analysis(
+            current_company.corp_name, 
+            current_financial_data
+        )
+        
+        # HTML 포맷팅
+        formatted_analysis = format_analysis_result(analysis)
+        
+        return jsonify({
+            'success': True,
+            'analysis': formatted_analysis,
+            'company': current_company.corp_name
+        })
+        
+    except Exception as e:
+        log_api_call("FINANCIAL_ANALYSIS", 
                     current_company.corp_name if current_company else "", 
                     "error")
         return jsonify({'error': str(e)}), 500
