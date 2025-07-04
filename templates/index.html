@@ -5,49 +5,114 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🔍 DART + Gemini 사업보고서 분석 챗봇</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🔍 DART + Gemini 사업보고서 분석 챗봇</h1>
-            <p>한국 상장기업의 사업보고서를 자동으로 분석하고 회계감사 포인트를 제시하는 AI 챗봇</p>
-        </div>
-
-        <div class="main-content">
-            <div class="card search-section">
-                <h2>🏢 회사 검색</h2>
-                <div class="form-group">
-                    <label for="companyNameInput">회사명을 입력하세요</label>
-                    <input type="text" id="companyNameInput" class="form-control" placeholder="예: 삼성전자">
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-chart-line"></i>
+                    <span>DART Analytics</span>
                 </div>
-                <button id="searchBtn" class="btn">🔍 검색하기</button>
-                <div id="searchResults" class="company-list" style="display: none;"></div>
-                <div id="selectedCompany" style="display: none;"></div>
+                <p class="header-description">AI 기반 한국 상장기업 재무분석 플랫폼</p>
             </div>
+        </header>
 
-            <div class="card analysis-section" id="analysisSection">
-                <h2>📊 분석 메뉴</h2>
-                <div class="analysis-buttons">
-                    <button id="businessAnalysisBtn" class="btn btn-business">🏢 사업분석</button>
-                    <button id="financialAnalysisBtn" class="btn btn-financial">📈 재무분석</button>
-                    <button id="auditPointsBtn" class="btn btn-audit">⚠️ 감사 시 유의사항</button>
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Search Section -->
+            <section class="search-section">
+                <div class="search-card">
+                    <div class="card-header">
+                        <i class="fas fa-building"></i>
+                        <h2>기업 검색</h2>
+                    </div>
+                    <div class="search-form">
+                        <div class="input-group">
+                            <input type="text" id="companyNameInput" class="search-input" placeholder="기업명을 입력하세요 (예: 삼성전자)">
+                            <button id="searchBtn" class="search-btn">
+                                <i class="fas fa-search"></i>
+                                검색
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="searchResults" class="search-results" style="display: none;"></div>
+                    <div id="selectedCompany" class="selected-company" style="display: none;"></div>
                 </div>
-                <div id="analysisResult" class="result-area" style="display: none;"></div>
+            </section>
+
+            <!-- Analysis Section -->
+            <section class="analysis-section" id="analysisSection" style="display: none;">
+                <div class="analysis-card">
+                    <div class="card-header">
+                        <i class="fas fa-chart-bar"></i>
+                        <h2>분석 도구</h2>
+                    </div>
+                    <div class="analysis-buttons">
+                        <button id="businessAnalysisBtn" class="analysis-btn business">
+                            <i class="fas fa-briefcase"></i>
+                            <span>사업분석</span>
+                            <small>비즈니스 모델 및 성장성</small>
+                        </button>
+                        <button id="financialAnalysisBtn" class="analysis-btn financial">
+                            <i class="fas fa-calculator"></i>
+                            <span>재무분석</span>
+                            <small>수익성 및 안정성</small>
+                        </button>
+                        <button id="auditPointsBtn" class="analysis-btn audit">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>감사 포인트</span>
+                            <small>리스크 및 주의사항</small>
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="analysisResult" class="analysis-result" style="display: none;"></div>
+            </section>
+
+            <!-- Chat Section -->
+            <section class="chat-section" id="chatSection" style="display: none;">
+                <div class="chat-card">
+                    <div class="card-header">
+                        <i class="fas fa-robot"></i>
+                        <h2>AI 어시스턴트</h2>
+                        <small>선택한 기업의 재무정보에 대해 자유롭게 질문하세요</small>
+                    </div>
+                    
+                    <div id="chatMessages" class="chat-messages"></div>
+                    
+                    <div class="chat-input-container">
+                        <div class="chat-input-group">
+                            <input type="text" id="chatInput" class="chat-input" placeholder="궁금한 점을 질문해보세요...">
+                            <button id="chatSendBtn" class="chat-send-btn">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Loading Overlay -->
+        <div id="loading" class="loading-overlay">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <p>분석 중입니다...</p>
             </div>
         </div>
 
-        <div class="chat-section" id="chatSection">
-            <h2>🤖 AI 챗봇</h2>
-            <p>선택한 회사의 재무정보에 대해 자유롭게 질문해보세요!</p>
-            <div id="chatMessages" class="chat-messages"></div>
-            <div class="chat-input-area">
-                <input type="text" id="chatInput" class="form-control chat-input" placeholder="질문을 입력하세요...">
-                <button id="chatSendBtn" class="btn btn-success">💬 전송</button>
-            </div>
+        <!-- Error Toast -->
+        <div id="errorMsg" class="error-toast">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span class="error-text"></span>
+            <button class="error-close">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
-
-        <div id="loading" class="loading"><div class="spinner"></div><p>처리 중입니다...</p></div>
-        <div id="errorMsg" class="error"></div>
     </div>
 
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
