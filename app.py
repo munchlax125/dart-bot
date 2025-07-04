@@ -1,343 +1,93 @@
+"""
+메인 Flask 애플리케이션
+- 라우팅 및 API 엔드포인트
+- 요청/응답 처리
+- 에러 핸들링
+"""
+
 from flask import Flask, render_template, request, jsonify
 import os
-import requests
-import xml.etree.ElementTree as ET
-import google.generativeai as genai
-from typing import Dict, List, Optional
-import json
-import zipfile
-import io
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 from dotenv import load_dotenv
-import re
-import html
+
+# 커스텀 모듈 임포트
+from dart_api import DARTClient, CompanyInfo
+from gemini_chat import GeminiAnalyzer
+from utils import format_analysis_result, sanitize_input, log_api_call, get_error_message
 
 # .env 파일 로드
 load_dotenv()
 
 app = Flask(__name__)
 
-@dataclass
-class CompanyInfo:
-    corp_code: str
-    corp_name: str
-    stock_code: str
-
-def format_analysis_result(text: str) -> str:
-    """분석 결과를 HTML 형식으로 변환"""
-    # HTML 이스케이프 (안전성)
-    text = html.escape(text)
-    
-    # 1. 헤딩 변환 (순서 중요 - 큰 것부터)
-    text = re.sub(
-        r'^### (.*?)$', 
-        r'<h3 style="color: #667eea; font-size: 18px; font-weight: bold; margin: 20px 0 10px 0;">\1</h3>', 
-        text, 
-        flags=re.MULTILINE
-    )
-    text = re.sub(
-        r'^## (.*?)$', 
-        r'<h2 style="color: #667eea; font-size: 20px; font-weight: bold; margin: 25px 0 15px 0;">\1</h2>', 
-        text, 
-        flags=re.MULTILINE
-    )
-    text = re.sub(
-        r'^# (.*?)$', 
-        r'<h1 style="color: #667eea; font-size: 24px; font-weight: bold; margin: 30px 0 20px 0;">\1</h1>', 
-        text, 
-        flags=re.MULTILINE
-    )
-    
-    # 2. 볼드/이탤릭 (순서 중요 - ** 먼저)
-    text = re.sub(
-        r'\*\*(.*?)\*\*', 
-        r'<strong style="color: #764ba2; font-weight: bold;">\1</strong>', 
-        text
-    )
-    text = re.sub(
-        r'(?<!\*)\*([^*]+?)\*(?!\*)', 
-        r'<em style="color: #555; font-style: italic;">\1</em>', 
-        text
-    )
-    
-    # 3. 리스트 아이템 처리
-    lines = text.split('\n')
-    formatted_lines = []
-    in_list = False
-    
-    for line in lines:
-        # 불릿 포인트
-        if re.match(r'^[\s]*[\*\-\+] ', line):
-            content = re.sub(r'^[\s]*[\*\-\+] ', '', line)
-            if not in_list:
-                formatted_lines.append('<ul style="padding-left: 25px; margin: 15px 0;">')
-                in_list = True
-            formatted_lines.append(f'<li style="margin: 8px 0; color: #333;">{content}</li>')
-        # 숫자 리스트
-        elif re.match(r'^[\s]*\d+\. ', line):
-            content = re.sub(r'^[\s]*\d+\. ', '', line)
-            if not in_list:
-                formatted_lines.append('<ol style="padding-left: 25px; margin: 15px 0;">')
-                in_list = True
-            formatted_lines.append(f'<li style="margin: 8px 0; color: #333;">{content}</li>')
-        else:
-            if in_list:
-                formatted_lines.append('</ul>')
-                in_list = False
-            formatted_lines.append(line)
-    
-    # 마지막에 열린 리스트 닫기
-    if in_list:
-        formatted_lines.append('</ul>')
-    
-    text = '\n'.join(formatted_lines)
-    
-    # 4. 구분선
-    text = re.sub(
-        r'^={3,}$', 
-        '<hr style="margin: 20px 0; border: none; border-top: 2px solid #667eea; opacity: 0.7;">', 
-        text, 
-        flags=re.MULTILINE
-    )
-    text = re.sub(
-        r'^-{3,}$', 
-        '<hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">', 
-        text, 
-        flags=re.MULTILINE
-    )
-    
-    # 5. 특수 패턴 (이모지)
-    text = re.sub(r'(⭐+)', r'<span style="color: #ffd700; font-size: 16px;">\1</span>', text)
-    text = re.sub(r'(✅|❌|⚠️|🔍|📊)', r'<span style="font-size: 16px;">\1</span>', text)
-    
-    # 6. 줄바꿈을 <br>로 변환
-    text = re.sub(r'\n(?![<])', '<br>', text)
-    
-    return f'<div style="line-height: 1.8; font-size: 14px; color: #333;">{text}</div>'
-
-class DARTAnalyzer:
-    def __init__(self, dart_api_key: str, gemini_api_key: str):
-        self.dart_api_key = dart_api_key
-        self.dart_base_url = "https://opendart.fss.or.kr/api"
-        
-        # Gemini API 설정
-        genai.configure(api_key=gemini_api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-pro')
-        
-    def search_company(self, company_name: str) -> List[CompanyInfo]:
-        """회사명으로 DART 기업 검색"""
-        url = f"{self.dart_base_url}/corpCode.xml"
-        params = {'crtfc_key': self.dart_api_key}
-        
-        try:
-            response = requests.get(url, params=params, timeout=30)
-            
-            if response.status_code != 200:
-                raise Exception(f"DART API 호출 실패: {response.status_code}")
-            
-            content = response.content
-            
-            # ZIP 파일인지 확인 및 압축 해제
-            if content.startswith(b'PK'):
-                with zipfile.ZipFile(io.BytesIO(content)) as zip_file:
-                    file_list = zip_file.namelist()
-                    if file_list:
-                        xml_content = zip_file.read(file_list[0])
-                        content = xml_content
-            
-            # XML 파싱
-            try:
-                if isinstance(content, bytes):
-                    xml_string = content.decode('utf-8')
-                else:
-                    xml_string = content
-                
-                # BOM 제거
-                if xml_string.startswith('\ufeff'):
-                    xml_string = xml_string[1:]
-                
-                root = ET.fromstring(xml_string)
-                
-            except UnicodeDecodeError:
-                xml_string = content.decode('euc-kr')
-                root = ET.fromstring(xml_string)
-            
-            # 회사 검색
-            companies = []
-            for corp in root.findall('.//list'):
-                corp_name = corp.find('corp_name')
-                corp_code = corp.find('corp_code')
-                stock_code = corp.find('stock_code')
-                
-                if corp_name is not None and corp_code is not None:
-                    corp_name_text = corp_name.text if corp_name.text else ""
-                    if company_name.lower() in corp_name_text.lower():
-                        companies.append(CompanyInfo(
-                            corp_code=corp_code.text,
-                            corp_name=corp_name_text,
-                            stock_code=stock_code.text if stock_code is not None and stock_code.text else ""
-                        ))
-                        
-            return companies[:10]
-            
-        except Exception as e:
-            raise Exception(f"기업 검색 실패: {str(e)}")
-    
-    def get_financial_statements(self, corp_code: str, year: str = "2023") -> Dict:
-        """재무제표 정보 조회"""
-        url = f"{self.dart_base_url}/fnlttSinglAcnt.json"
-        params = {
-            'crtfc_key': self.dart_api_key,
-            'corp_code': corp_code,
-            'bsns_year': year,
-            'reprt_code': '11011',
-            'fs_div': 'CFS'
-        }
-        
-        try:
-            response = requests.get(url, params=params, timeout=30)
-            
-            if response.status_code != 200:
-                raise Exception(f"재무제표 조회 실패: {response.status_code}")
-            
-            result = response.json()
-            
-            if result.get('status') == '013':
-                # 연결재무제표가 없으면 개별재무제표 시도
-                params['fs_div'] = 'OFS'
-                response = requests.get(url, params=params, timeout=30)
-                result = response.json()
-                
-                if result.get('status') != '000':
-                    raise Exception("재무제표 데이터를 찾을 수 없습니다.")
-                    
-            elif result.get('status') != '000':
-                raise Exception(f"API 오류: {result.get('message', '알 수 없는 오류')}")
-                
-            return result
-            
-        except Exception as e:
-            raise Exception(f"재무제표 조회 실패: {str(e)}")
-    
-    def simple_analysis(self, company_name: str, financial_data: Dict) -> str:
-        """간단분석 수행"""
-        prompt = f"""
-        다음은 {company_name}의 재무제표 데이터입니다:
-        
-        {json.dumps(financial_data, ensure_ascii=False, indent=2)}
-        
-        이 데이터를 바탕으로 다음 항목들에 대해 간단하고 명확한 분석을 제공해주세요:
-        
-        1. 재무 건전성 (부채비율, 유동비율 등)
-        2. 수익성 (매출액, 영업이익, 당기순이익 변화)
-        3. 성장성 (전년 대비 주요 지표 변화율)
-        4. 투자 포인트 (강점과 약점)
-        5. 종합 평가 (5점 만점 점수와 한줄 평가)
-        
-        분석은 일반 투자자가 이해하기 쉽도록 작성해주세요.
-        """
-        
-        try:
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            return f"분석 중 오류가 발생했습니다: {str(e)}"
-    
-    def audit_points(self, company_name: str, financial_data: Dict) -> str:
-        """회계감사시 유의사항 분석"""
-        prompt = f"""
-        다음은 {company_name}의 재무제표 데이터입니다:
-        
-        {json.dumps(financial_data, ensure_ascii=False, indent=2)}
-        
-        회계감사 관점에서 다음 사항들을 검토하고 유의사항을 제시해주세요:
-        
-        1. 수익인식 관련 위험요소
-        2. 자산 손상 및 평가 이슈
-        3. 부채 및 충당금 적정성
-        4. 특수관계자 거래
-        5. 계속기업 가정
-        6. 내부통제 취약점 가능성
-        7. 업종별 특수 감사위험
-        
-        각 항목별로 구체적인 감사절차와 검토 포인트를 제시해주세요.
-        """
-        
-        try:
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            return f"감사 분석 중 오류가 발생했습니다: {str(e)}"
-    
-    def chat_with_ai(self, company_name: str, financial_data: Dict, user_question: str) -> str:
-        """AI 챗봇 기능"""
-        prompt = f"""
-        당신은 {company_name}의 재무제표를 분석하는 전문 AI 어시스턴트입니다.
-        
-        회사 재무정보:
-        {json.dumps(financial_data, ensure_ascii=False, indent=2)}
-        
-        사용자 질문: {user_question}
-        
-        위 재무정보를 바탕으로 사용자의 질문에 정확하고 도움이 되는 답변을 제공해주세요.
-        답변은 구체적인 숫자와 근거를 포함하여 설명해주세요.
-        """
-        
-        try:
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            return f"답변 생성 중 오류가 발생했습니다: {str(e)}"
-
 # 전역 변수
-analyzer = None
+dart_client = None
+gemini_analyzer = None
 current_company = None
 current_financial_data = None
 
-def init_analyzer():
-    """분석기 초기화"""
-    global analyzer
+
+def initialize_clients():
+    """API 클라이언트 초기화"""
+    global dart_client, gemini_analyzer
+    
     dart_api_key = os.getenv('DART_API_KEY')
     gemini_api_key = os.getenv('GEMINI_API_KEY')
     
     if not dart_api_key or not gemini_api_key:
-        raise Exception("API 키가 설정되지 않았습니다.")
+        raise Exception("API 키가 설정되지 않았습니다. .env 파일을 확인해주세요.")
     
-    analyzer = DARTAnalyzer(dart_api_key, gemini_api_key)
+    dart_client = DARTClient(dart_api_key)
+    gemini_analyzer = GeminiAnalyzer(gemini_api_key)
+    
+    # API 키 유효성 검사
+    if not dart_client.validate_api_key():
+        raise Exception("DART API 키가 유효하지 않습니다.")
+
 
 @app.route('/')
 def index():
     """메인 페이지"""
     return render_template('index.html')
 
+
 @app.route('/api/search', methods=['POST'])
 def search_companies():
     """회사 검색 API"""
     try:
+        # 클라이언트 초기화
+        if dart_client is None:
+            initialize_clients()
+        
+        # 요청 데이터 파싱
         data = request.get_json()
-        company_name = data.get('company_name', '').strip()
+        company_name = sanitize_input(data.get('company_name', ''))
         
         if not company_name:
             return jsonify({'error': '회사명을 입력해주세요.'}), 400
         
-        if analyzer is None:
-            init_analyzer()
+        # 로그 기록
+        log_api_call("SEARCH", company_name)
         
-        companies = analyzer.search_company(company_name)
+        # 회사 검색
+        companies = dart_client.search_company(company_name)
         
         if not companies:
             return jsonify({'error': '검색된 회사가 없습니다.'}), 404
         
-        # 데이터클래스를 딕셔너리로 변환
+        # 응답 데이터 변환
         companies_dict = [asdict(company) for company in companies]
         
         return jsonify({
             'success': True,
-            'companies': companies_dict
+            'companies': companies_dict,
+            'count': len(companies_dict)
         })
         
     except Exception as e:
+        log_api_call("SEARCH", company_name if 'company_name' in locals() else "", "error")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/select', methods=['POST'])
 def select_company():
@@ -345,22 +95,27 @@ def select_company():
     global current_company, current_financial_data
     
     try:
+        # 클라이언트 초기화
+        if dart_client is None:
+            initialize_clients()
+        
+        # 요청 데이터 파싱
         data = request.get_json()
-        corp_code = data.get('corp_code')
-        corp_name = data.get('corp_name')
-        stock_code = data.get('stock_code')
+        corp_code = sanitize_input(data.get('corp_code', ''))
+        corp_name = sanitize_input(data.get('corp_name', ''))
+        stock_code = sanitize_input(data.get('stock_code', ''))
         
         if not corp_code:
             return jsonify({'error': '회사 코드가 필요합니다.'}), 400
         
-        if analyzer is None:
-            init_analyzer()
+        # 로그 기록
+        log_api_call("SELECT", corp_name)
         
         # 현재 선택된 회사 저장
         current_company = CompanyInfo(corp_code, corp_name, stock_code)
         
         # 재무제표 데이터 가져오기
-        current_financial_data = analyzer.get_financial_statements(corp_code, "2023")
+        current_financial_data = dart_client.get_financial_statements(corp_code, "2023")
         
         return jsonify({
             'success': True,
@@ -369,19 +124,31 @@ def select_company():
         })
         
     except Exception as e:
+        log_api_call("SELECT", corp_name if 'corp_name' in locals() else "", "error")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/simple-analysis', methods=['GET'])
 def get_simple_analysis():
     """간단 분석 API"""
     try:
+        # 유효성 검사
         if current_company is None or current_financial_data is None:
             return jsonify({'error': '먼저 회사를 선택해주세요.'}), 400
         
-        if analyzer is None:
-            init_analyzer()
+        if gemini_analyzer is None:
+            initialize_clients()
         
-        analysis = analyzer.simple_analysis(current_company.corp_name, current_financial_data)
+        # 로그 기록
+        log_api_call("SIMPLE_ANALYSIS", current_company.corp_name)
+        
+        # AI 분석 실행
+        analysis = gemini_analyzer.simple_analysis(
+            current_company.corp_name, 
+            current_financial_data
+        )
+        
+        # HTML 포맷팅
         formatted_analysis = format_analysis_result(analysis)
         
         return jsonify({
@@ -391,19 +158,33 @@ def get_simple_analysis():
         })
         
     except Exception as e:
+        log_api_call("SIMPLE_ANALYSIS", 
+                    current_company.corp_name if current_company else "", 
+                    "error")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/audit-points', methods=['GET'])
 def get_audit_points():
     """감사 유의사항 API"""
     try:
+        # 유효성 검사
         if current_company is None or current_financial_data is None:
             return jsonify({'error': '먼저 회사를 선택해주세요.'}), 400
         
-        if analyzer is None:
-            init_analyzer()
+        if gemini_analyzer is None:
+            initialize_clients()
         
-        audit_analysis = analyzer.audit_points(current_company.corp_name, current_financial_data)
+        # 로그 기록
+        log_api_call("AUDIT_POINTS", current_company.corp_name)
+        
+        # AI 분석 실행
+        audit_analysis = gemini_analyzer.audit_points_analysis(
+            current_company.corp_name, 
+            current_financial_data
+        )
+        
+        # HTML 포맷팅
         formatted_audit_analysis = format_analysis_result(audit_analysis)
         
         return jsonify({
@@ -413,25 +194,41 @@ def get_audit_points():
         })
         
     except Exception as e:
+        log_api_call("AUDIT_POINTS", 
+                    current_company.corp_name if current_company else "", 
+                    "error")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/chat', methods=['POST'])
 def chat_with_ai():
     """AI 챗봇 API"""
     try:
+        # 유효성 검사
         if current_company is None or current_financial_data is None:
             return jsonify({'error': '먼저 회사를 선택해주세요.'}), 400
         
+        if gemini_analyzer is None:
+            initialize_clients()
+        
+        # 요청 데이터 파싱
         data = request.get_json()
-        question = data.get('question', '').strip()
+        question = sanitize_input(data.get('question', ''))
         
         if not question:
             return jsonify({'error': '질문을 입력해주세요.'}), 400
         
-        if analyzer is None:
-            init_analyzer()
+        # 로그 기록
+        log_api_call("CHAT", f"{current_company.corp_name} - Q: {question[:50]}...")
         
-        answer = analyzer.chat_with_ai(current_company.corp_name, current_financial_data, question)
+        # AI 응답 생성
+        answer = gemini_analyzer.chat_response(
+            current_company.corp_name,
+            current_financial_data,
+            question
+        )
+        
+        # HTML 포맷팅
         formatted_answer = format_analysis_result(answer)
         
         return jsonify({
@@ -441,15 +238,68 @@ def chat_with_ai():
         })
         
     except Exception as e:
+        log_api_call("CHAT", 
+                    current_company.corp_name if current_company else "", 
+                    "error")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
     """현재 상태 확인 API"""
     return jsonify({
         'current_company': asdict(current_company) if current_company else None,
-        'has_financial_data': current_financial_data is not None
+        'has_financial_data': current_financial_data is not None,
+        'clients_initialized': dart_client is not None and gemini_analyzer is not None
     })
 
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """헬스 체크 API"""
+    try:
+        if dart_client is None:
+            initialize_clients()
+        
+        # DART API 연결 테스트
+        dart_status = dart_client.validate_api_key()
+        
+        return jsonify({
+            'status': 'healthy',
+            'dart_api': 'connected' if dart_status else 'disconnected',
+            'gemini_api': 'connected' if gemini_analyzer else 'disconnected'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        }), 500
+
+
+@app.errorhandler(404)
+def not_found(error):
+    """404 에러 핸들러"""
+    return jsonify({'error': '요청된 리소스를 찾을 수 없습니다.'}), 404
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    """500 에러 핸들러"""
+    return jsonify({'error': '서버 내부 오류가 발생했습니다.'}), 500
+
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    try:
+        # 시작 시 클라이언트 초기화
+        print("🚀 서버 시작 중...")
+        initialize_clients()
+        print("✅ API 클라이언트 초기화 완료!")
+        
+        # Flask 서버 실행
+        print("🌐 서버가 http://localhost:5000 에서 실행됩니다.")
+        app.run(debug=True, host='0.0.0.0', port=5000)
+        
+    except Exception as e:
+        print(f"❌ 서버 시작 실패: {e}")
+        print("💡 .env 파일의 API 키를 확인해주세요.")
