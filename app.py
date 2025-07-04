@@ -1,11 +1,12 @@
-# app.py - Enhanced version
+# app.py - 2024년 데이터 지원 완전 버전
 """
 메인 Flask 애플리케이션. 세션 기반으로 상태를 관리합니다.
-개선사항: 로깅, 환경변수 검증, 에러 처리 강화, 보안 개선
+개선사항: 로깅, 환경변수 검증, 에러 처리 강화, 보안 개선, 2024년 데이터 지원
 """
 from flask import Flask, render_template, request, jsonify, session
 import os
 import logging
+import time
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -120,8 +121,11 @@ def search_companies():
     """회사명으로 기업 목록 검색"""
     try:
         data = request.get_json()
+        logger.info(f"검색 요청 데이터: {data}")
+        
         error = validate_request_data(data, ['company_name'])
         if error:
+            logger.error(f"검증 실패: {error}")
             return api_response(success=False, error=error, status_code=400)
         
         company_name = formatters.sanitize_input(data.get('company_name', ''))
@@ -130,6 +134,7 @@ def search_companies():
         
         logger.info(f"기업 검색 요청: {company_name}")
         companies = dart_client.search_company(company_name)
+        logger.info(f"검색 결과: {len(companies)}개 기업")
         
         return api_response(
             success=True, 
@@ -138,13 +143,13 @@ def search_companies():
         )
         
     except Exception as e:
-        logger.error(f"기업 검색 오류: {e}")
-        raise
+        logger.error(f"기업 검색 오류: {e}", exc_info=True)
+        return api_response(success=False, error=f"검색 중 오류가 발생했습니다: {str(e)}", status_code=500)
 
 @app.route('/api/select', methods=['POST'])
 @limiter.limit("10 per minute")
 def select_company():
-    """사용자가 선택한 기업의 재무 정보를 가져와 세션에 저장"""
+    """사용자가 선택한 기업의 재무 정보를 가져와 세션에 저장 (2024년 데이터 우선)"""
     try:
         data = request.get_json()
         error = validate_request_data(data, ['corp_code', 'corp_name'])
@@ -156,8 +161,27 @@ def select_company():
         
         logger.info(f"기업 선택: {corp_name} ({corp_code})")
         
-        # 재무 데이터 가져오기
-        financial_data = dart_client.get_financial_statements(corp_code, "2023")
+        # 동적 연도 설정: 2024년 먼저 시도, 없으면 2023년, 2022년
+        financial_data = None
+        year_used = None
+        
+        for year in ["2024", "2023", "2022"]:
+            try:
+                logger.info(f"{corp_name} {year}년 재무데이터 조회 시도")
+                financial_data = dart_client.get_financial_statements(corp_code, year)
+                year_used = year
+                logger.info(f"{corp_name} {year}년 재무데이터 조회 성공")
+                break
+            except DARTApiException as e:
+                logger.warning(f"{corp_name} {year}년 데이터 조회 실패: {e}")
+                continue
+        
+        if not financial_data:
+            return api_response(
+                success=False, 
+                error="최근 3년간 재무제표 데이터를 찾을 수 없습니다. 다른 기업을 선택해주세요.", 
+                status_code=404
+            )
         
         # 데이터 크기 확인 (세션 저장소 제한 고려)
         if len(str(financial_data)) > 1000000:  # 1MB 제한
@@ -167,27 +191,29 @@ def select_company():
         session['corp_name'] = corp_name
         session['corp_code'] = corp_code
         session['financial_data'] = financial_data
-        session['selected_at'] = str(int(time.time()) if 'time' in globals() else 0)
+        session['data_year'] = year_used
+        session['selected_at'] = str(int(time.time()))
         
         return api_response(
             success=True,
-            message=f"{corp_name} 선택 완료",
-            data={'company_name': corp_name}
+            message=f"{corp_name} ({year_used}년 데이터) 선택 완료",
+            data={'company_name': corp_name, 'data_year': year_used}
         )
         
     except Exception as e:
-        logger.error(f"기업 선택 오류: {e}")
-        raise
+        logger.error(f"기업 선택 오류: {e}", exc_info=True)
+        return api_response(success=False, error=f"기업 선택 중 오류가 발생했습니다: {str(e)}", status_code=500)
 
 def _get_session_data():
     """세션에서 회사 이름과 재무 데이터를 가져오는 헬퍼 함수"""
     corp_name = session.get('corp_name')
     financial_data = session.get('financial_data')
+    data_year = session.get('data_year', 'Unknown')
     
     if not corp_name or not financial_data:
         raise ValueError('분석할 회사를 먼저 선택해주세요.')
     
-    logger.info(f"세션 데이터 조회: {corp_name}")
+    logger.info(f"세션 데이터 조회: {corp_name} ({data_year}년)")
     return corp_name, financial_data
 
 @app.route('/api/business-analysis', methods=['GET'])
@@ -210,8 +236,8 @@ def get_business_analysis():
     except ValueError as e:
         return api_response(success=False, error=str(e), status_code=400)
     except Exception as e:
-        logger.error(f"사업 분석 오류: {e}")
-        raise
+        logger.error(f"사업 분석 오류: {e}", exc_info=True)
+        return api_response(success=False, error=f"분석 중 오류가 발생했습니다: {str(e)}", status_code=500)
 
 @app.route('/api/financial-analysis', methods=['GET'])
 @limiter.limit("5 per minute")
@@ -233,8 +259,8 @@ def get_financial_analysis():
     except ValueError as e:
         return api_response(success=False, error=str(e), status_code=400)
     except Exception as e:
-        logger.error(f"재무 분석 오류: {e}")
-        raise
+        logger.error(f"재무 분석 오류: {e}", exc_info=True)
+        return api_response(success=False, error=f"분석 중 오류가 발생했습니다: {str(e)}", status_code=500)
 
 @app.route('/api/audit-points', methods=['GET'])
 @limiter.limit("5 per minute")
@@ -256,8 +282,8 @@ def get_audit_points():
     except ValueError as e:
         return api_response(success=False, error=str(e), status_code=400)
     except Exception as e:
-        logger.error(f"감사 포인트 분석 오류: {e}")
-        raise
+        logger.error(f"감사 포인트 분석 오류: {e}", exc_info=True)
+        return api_response(success=False, error=f"분석 중 오류가 발생했습니다: {str(e)}", status_code=500)
 
 @app.route('/api/chat', methods=['POST'])
 @limiter.limit("15 per minute")
@@ -289,8 +315,8 @@ def chat_with_ai():
     except ValueError as e:
         return api_response(success=False, error=str(e), status_code=400)
     except Exception as e:
-        logger.error(f"채팅 응답 오류: {e}")
-        raise
+        logger.error(f"채팅 응답 오류: {e}", exc_info=True)
+        return api_response(success=False, error=f"응답 생성 중 오류가 발생했습니다: {str(e)}", status_code=500)
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -302,9 +328,9 @@ def health_check():
     )
 
 if __name__ == '__main__':
-    import time
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') != 'production'
     
     logger.info(f"🌐 서버가 http://localhost:{port} 에서 실행됩니다.")
+    logger.info("✅ 2024년 재무데이터 지원 활성화")
     app.run(debug=debug, host='0.0.0.0', port=port)

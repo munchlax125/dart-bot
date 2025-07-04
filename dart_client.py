@@ -1,11 +1,13 @@
-# dart_client.py
-"""DART API 전용 모듈"""
+# dart_client.py - 향상된 버전
 import requests
 import xml.etree.ElementTree as ET
 import zipfile
 import io
+import logging
 from typing import Dict, List
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 class DARTApiException(Exception):
     """DART API 관련 커스텀 예외"""
@@ -57,17 +59,70 @@ class DARTClient:
 
     def get_financial_statements(self, corp_code: str, year: str) -> Dict:
         """재무제표 정보 조회 (연결 -> 개별 순차 조회)"""
-        for fs_div in ['CFS', 'OFS']: # 연결(CFS) 먼저, 없으면 개별(OFS)
-            params = {
-                'crtfc_key': self.api_key, 'corp_code': corp_code,
-                'bsns_year': year, 'reprt_code': '11011', 'fs_div': fs_div
-            }
-            response = self._request_get(f"{self.base_url}/fnlttSinglAcnt.json", params)
-            result = response.json()
-            if result.get('status') == '000':
-                return result
+        logger.info(f"재무제표 조회 시작: {corp_code}, {year}년")
         
-        raise DARTApiException(f"{year}년도 재무제표 데이터를 찾을 수 없습니다. (에러 코드: {result.get('status')})")
+        # 먼저 해당 연도의 사업보고서가 있는지 확인
+        if not self._check_business_report_exists(corp_code, year):
+            raise DARTApiException(f"{year}년도 사업보고서가 제출되지 않았습니다.")
+        
+        for fs_div in ['CFS', 'OFS']:  # 연결(CFS) 먼저, 없으면 개별(OFS)
+            params = {
+                'crtfc_key': self.api_key, 
+                'corp_code': corp_code,
+                'bsns_year': year, 
+                'reprt_code': '11011',  # 사업보고서
+                'fs_div': fs_div
+            }
+            
+            try:
+                response = self._request_get(f"{self.base_url}/fnlttSinglAcnt.json", params)
+                result = response.json()
+                
+                if result.get('status') == '000' and result.get('list'):
+                    logger.info(f"{year}년 재무제표 조회 성공 (구분: {fs_div})")
+                    return result
+                elif result.get('status') == '013':
+                    logger.warning(f"{year}년 {fs_div} 재무제표 없음, 다른 구분 시도")
+                    continue
+                else:
+                    logger.warning(f"DART API 응답 오류: {result.get('message', 'Unknown error')}")
+                    
+            except Exception as e:
+                logger.error(f"재무제표 API 호출 오류: {e}")
+                continue
+        
+        # 모든 시도 실패
+        raise DARTApiException(f"{year}년도 재무제표 데이터를 찾을 수 없습니다.")
+
+    def _check_business_report_exists(self, corp_code: str, year: str) -> bool:
+        """사업보고서 존재 여부 확인"""
+        try:
+            # 공시목록 조회로 사업보고서 존재 확인
+            params = {
+                'crtfc_key': self.api_key,
+                'corp_code': corp_code,
+                'bgn_de': f"{year}0101",
+                'end_de': f"{int(year)+1}0430",  # 다음해 4월까지 (제출기한 고려)
+                'pblntf_ty': 'A',  # 정기공시
+                'page_count': 100
+            }
+            
+            response = self._request_get(f"{self.base_url}/list.json", params)
+            result = response.json()
+            
+            if result.get('status') == '000' and result.get('list'):
+                # 사업보고서 존재 확인
+                for item in result['list']:
+                    if '사업보고서' in item.get('report_nm', ''):
+                        logger.info(f"{year}년 사업보고서 확인됨")
+                        return True
+            
+            logger.warning(f"{year}년 사업보고서 미확인")
+            return False
+            
+        except Exception as e:
+            logger.warning(f"사업보고서 존재 확인 실패: {e}")
+            return True  # 확인 실패 시 일단 시도해보기
 
     def _extract_zip_content(self, content: bytes) -> bytes:
         """ZIP 파일 압축 해제"""

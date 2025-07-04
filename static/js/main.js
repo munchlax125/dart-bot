@@ -1,5 +1,70 @@
-// static/js/main.js - Enhanced version
+// static/js/main.js - API 객체 포함 버전 (백업용)
 document.addEventListener('DOMContentLoaded', () => {
+    // API 객체 직접 정의 (api.js가 로드되지 않는 경우 대비)
+    if (typeof api === 'undefined') {
+        console.warn('⚠️ api.js에서 로드되지 않아 내장 API 객체를 사용합니다.');
+        
+        window.api = {
+            async post(endpoint, body) {
+                console.log(`POST ${endpoint}:`, body);
+                return this._fetch(endpoint, 'POST', body);
+            },
+
+            async get(endpoint) {
+                console.log(`GET ${endpoint}`);
+                return this._fetch(endpoint, 'GET');
+            },
+
+            async _fetch(endpoint, method, body = null) {
+                const options = {
+                    method: method,
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                };
+                
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                try {
+                    console.log(`API 요청: ${method} ${endpoint}`, options);
+                    
+                    const response = await fetch(endpoint, options);
+                    console.log(`API 응답 상태: ${response.status}`);
+                    
+                    const data = await response.json();
+                    console.log(`API 응답 데이터:`, data);
+
+                    if (!response.ok) {
+                        const errorMessage = data.error || `HTTP error! status: ${response.status}`;
+                        console.error(`API 오류: ${errorMessage}`);
+                        throw new Error(errorMessage);
+                    }
+                    
+                    return data;
+                } catch (error) {
+                    console.error('API Error:', error);
+                    
+                    // 네트워크 오류인지 확인
+                    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                        throw new Error('네트워크 연결을 확인해주세요.');
+                    }
+                    
+                    // JSON 파싱 오류인지 확인
+                    if (error.name === 'SyntaxError') {
+                        throw new Error('서버 응답 형식이 올바르지 않습니다.');
+                    }
+                    
+                    throw error;
+                }
+            }
+        };
+    }
+    
+    console.log('✅ API 객체 확인됨:', api);
+    
     // DOM 요소 가져오기
     const searchBtn = document.getElementById('searchBtn');
     const companyNameInput = document.getElementById('companyNameInput');
@@ -16,31 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorText = errorToast.querySelector('.error-text');
     const errorClose = errorToast.querySelector('.error-close');
 
-    // 이벤트 리스너 등록
-    searchBtn.addEventListener('click', searchCompany);
-    companyNameInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            searchCompany();
-        }
-    });
-    
-    document.getElementById('businessAnalysisBtn').addEventListener('click', () => getAnalysis('/api/business-analysis', 'business'));
-    document.getElementById('financialAnalysisBtn').addEventListener('click', () => getAnalysis('/api/financial-analysis', 'financial'));
-    document.getElementById('auditPointsBtn').addEventListener('click', () => getAnalysis('/api/audit-points', 'audit'));
-    
-    chatSendBtn.addEventListener('click', sendChatMessage);
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sendChatMessage();
-        }
-    });
-
-    // 에러 토스트 닫기
-    errorClose.addEventListener('click', hideError);
-
-    // UI 제어 함수들
+    // UI 제어 함수들 먼저 정의
     const showLoading = (message = '처리 중입니다...') => {
         const loadingText = loadingOverlay.querySelector('p');
         if (loadingText) loadingText.textContent = message;
@@ -78,9 +119,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // 회사 검색
+    // 회사 검색 함수
     async function searchCompany() {
         const companyName = companyNameInput.value.trim();
+        console.log('검색 시작:', companyName);
+        
         if (!companyName) {
             showError('회사명을 입력해주세요.');
             companyNameInput.focus();
@@ -96,11 +139,18 @@ document.addEventListener('DOMContentLoaded', () => {
         searchBtn.disabled = true;
         
         try {
-            const data = await api.post('/api/search', { company_name: companyName });
-            displaySearchResults(data.companies);
+            console.log('API 호출 중...');
+            const response = await api.post('/api/search', { company_name: companyName });
+            console.log('API 응답:', response);
+            
+            if (response.success) {
+                displaySearchResults(response.data.companies);
+            } else {
+                showError(response.error || '검색 중 오류가 발생했습니다.');
+            }
         } catch (error) {
+            console.error('검색 오류:', error);
             showError(error.message || '검색 중 오류가 발생했습니다.');
-            console.error('Search error:', error);
         } finally {
             hideLoading();
             searchBtn.disabled = false;
@@ -108,6 +158,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function displaySearchResults(companies) {
+        console.log('검색 결과 표시:', companies);
+        
         if (!companies || companies.length === 0) {
             searchResults.innerHTML = `
                 <div class="no-results">
@@ -136,33 +188,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function selectCompany({ corpCode, corpName }) {
+        console.log('기업 선택:', corpName, corpCode);
         showLoading(`${corpName} 재무정보를 가져오고 있습니다...`);
         
         try {
-            await api.post('/api/select', { corp_code: corpCode, corp_name: corpName });
+            const response = await api.post('/api/select', { corp_code: corpCode, corp_name: corpName });
+            console.log('선택 응답:', response);
             
-            selectedCompanyDiv.innerHTML = `
-                <i class="fas fa-check-circle"></i>
-                <strong>${corpName}</strong> 선택 완료
-                <small style="margin-left: auto; opacity: 0.8;">분석 준비 완료</small>
-            `;
-            
-            selectedCompanyDiv.style.display = 'flex';
-            analysisSection.style.display = 'block';
-            chatSection.style.display = 'block';
-            searchResults.style.display = 'none';
-            
-            // 부드러운 스크롤
-            analysisSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            
-            // 분석 결과 초기화
-            analysisResultDiv.style.display = 'none';
-            chatMessagesDiv.innerHTML = '';
-            updateButtonStates();
+            if (response.success) {
+                selectedCompanyDiv.innerHTML = `
+                    <i class="fas fa-check-circle"></i>
+                    <strong>${corpName}</strong> 선택 완료
+                    <small style="margin-left: auto; opacity: 0.8;">분석 준비 완료</small>
+                `;
+                
+                selectedCompanyDiv.style.display = 'flex';
+                analysisSection.style.display = 'block';
+                chatSection.style.display = 'block';
+                searchResults.style.display = 'none';
+                
+                // 부드러운 스크롤
+                analysisSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                
+                // 분석 결과 초기화
+                analysisResultDiv.style.display = 'none';
+                chatMessagesDiv.innerHTML = '';
+                updateButtonStates();
+            } else {
+                showError(response.error || '기업 선택 중 오류가 발생했습니다.');
+            }
             
         } catch (error) {
+            console.error('선택 오류:', error);
             showError(error.message || '기업 선택 중 오류가 발생했습니다.');
-            console.error('Selection error:', error);
         } finally {
             hideLoading();
         }
@@ -176,19 +234,25 @@ document.addEventListener('DOMContentLoaded', () => {
         analysisResultDiv.style.display = 'none';
         
         try {
-            const data = await api.get(endpoint);
+            const response = await api.get(endpoint);
+            console.log('분석 응답:', response);
             
-            analysisResultDiv.innerHTML = data.analysis;
-            analysisResultDiv.style.display = 'block';
-            
-            // 부드러운 스크롤
-            setTimeout(() => {
-                analysisResultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
+            if (response.success) {
+                analysisResultDiv.innerHTML = response.data.analysis;
+                analysisResultDiv.style.display = 'block';
+                
+                // 부드러운 스크롤
+                setTimeout(() => {
+                    analysisResultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            } else {
+                showError(response.error || '분석 중 오류가 발생했습니다.');
+                updateButtonStates();
+            }
             
         } catch (error) {
+            console.error('분석 오류:', error);
             showError(error.message || '분석 중 오류가 발생했습니다.');
-            console.error('Analysis error:', error);
             updateButtonStates();
         } finally {
             hideLoading();
@@ -217,13 +281,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const typingId = addTypingIndicator();
 
         try {
-            const data = await api.post('/api/chat', { question });
+            const response = await api.post('/api/chat', { question });
+            console.log('채팅 응답:', response);
+            
             removeTypingIndicator(typingId);
-            addChatMessage('ai', data.answer);
+            
+            if (response.success) {
+                addChatMessage('ai', response.data.answer);
+            } else {
+                addChatMessage('ai', `❌ 오류: ${response.error}`);
+            }
         } catch (error) {
+            console.error('채팅 오류:', error);
             removeTypingIndicator(typingId);
             addChatMessage('ai', `❌ 죄송합니다. 오류가 발생했습니다: ${error.message}`);
-            console.error('Chat error:', error);
         } finally {
             chatInput.disabled = false;
             chatSendBtn.disabled = false;
@@ -306,6 +377,33 @@ document.addEventListener('DOMContentLoaded', () => {
         attributeFilter: ['style'] 
     });
 
+    // 이벤트 리스너 등록 (함수들이 정의된 후에 등록)
+    searchBtn.addEventListener('click', searchCompany);
+    companyNameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchCompany();
+        }
+    });
+    
+    document.getElementById('businessAnalysisBtn').addEventListener('click', () => getAnalysis('/api/business-analysis', 'business'));
+    document.getElementById('financialAnalysisBtn').addEventListener('click', () => getAnalysis('/api/financial-analysis', 'financial'));
+    document.getElementById('auditPointsBtn').addEventListener('click', () => getAnalysis('/api/audit-points', 'audit'));
+    
+    chatSendBtn.addEventListener('click', sendChatMessage);
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendChatMessage();
+        }
+    });
+
+    // 에러 토스트 닫기
+    errorClose.addEventListener('click', hideError);
+
     // 페이지 로드 시 입력 필드에 포커스
     companyNameInput.focus();
+    
+    // 디버깅용 로그
+    console.log('페이지 로드 완료, 이벤트 리스너 등록됨');
 });

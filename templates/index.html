@@ -115,7 +115,21 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <!-- JavaScript 파일들 - 순서 중요! -->
+    <script>
+        // 스크립트 로드 확인 함수
+        function checkApiLoaded() {
+            if (typeof api !== 'undefined') {
+                console.log('✅ API 객체가 성공적으로 로드되었습니다.');
+                return true;
+            } else {
+                console.error('❌ api.js 파일이 로드되지 않았습니다!');
+                return false;
+            }
+        }
+    </script>
+    
+    <script src="{{ url_for('static', filename='js/api.js') }}" onload="checkApiLoaded();" onerror="console.error('❌ api.js 로드 실패')"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}" onload="console.log('✅ main.js 로드 완료');" onerror="console.error('❌ main.js 로드 실패')"></script>
 </body>
 </html>
