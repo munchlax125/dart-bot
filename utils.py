@@ -77,14 +77,12 @@ def format_analysis_result(text: str) -> str:
     text = re.sub(r'(⭐+)', r'<span style="color: #ffd700; font-size: 18px; text-shadow: 1px 1px 2px rgba(0,0,0,0.1);">\1</span>', text)
     text = re.sub(r'(✅|❌|⚠️|🔍|📊|📈|📉|💰|🏢|🔧|💡|🎯|📋)', r'<span style="font-size: 18px; margin-right: 5px;">\1</span>', text)
     
-    # 7. 콜론(:) 뒤에 줄바꿈 추가
-    text = re.sub(r':\s*([가-힣])', r':<br>\1', text)
+    # 7. 자연스러운 줄바꿈만 처리 (이미 HTML 태그로 처리된 부분은 제외)
+    # 두 개 이상의 연속된 줄바꿈만 <br>로 변환
+    text = re.sub(r'\n{2,}', '<br><br>', text)
     
-    # 8. 쉼표나 마침표 뒤 적절한 간격
-    text = re.sub(r'([,.])\s*([가-힣A-Z])', r'\1<br>\2', text)
-    
-    # 9. 일반 줄바꿈을 <br>로 변환
-    text = re.sub(r'\n(?![<])', '<br><br>', text)
+    # 단일 줄바꿈은 공백으로 처리 (문단 내 텍스트가 자연스럽게 이어지도록)
+    text = re.sub(r'\n(?![<])', ' ', text)
     
     return f'<div style="line-height: 2.0; font-size: 15px; color: #333; padding: 20px; background: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">{text}</div>'
 

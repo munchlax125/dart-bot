@@ -648,15 +648,12 @@
             }
         }
 
-        // 분석 결과 표시 (HTML 렌더링)
+        // 분석 결과 표시 (HTML 렌더링) - 제목 중복 제거
         function displayAnalysisResult(title, content) {
             const resultDiv = document.getElementById('analysisResult');
             
+            // 제목 중복 제거 - 바로 분석 결과만 표시
             resultDiv.innerHTML = `
-                <div style="margin-bottom: 20px;">
-                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 20px; font-weight: bold;">${title}</h3>
-                    <hr style="margin: 15px 0; border: none; border-top: 2px solid #667eea;">
-                </div>
                 <div class="analysis-content">
                     ${content}
                 </div>
