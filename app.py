@@ -12,9 +12,9 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 # 리팩토링된 모듈 임포트
-from dart_client import DARTClient, DARTApiException
-from ai_analyzer import AIAnalyzer
-import formatters
+from src.dart_client import DARTClient, DARTApiException  #<- 'src.' 라는 새 주소 추가
+from src.ai_analyzer import AIAnalyzer                    #<- 'src.' 라는 새 주소 추가
+from src import formatters                                #<- 'src.' 라는 새 주소 추가
 
 # .env 파일에서 환경 변수 로드
 load_dotenv()
