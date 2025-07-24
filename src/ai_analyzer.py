@@ -12,7 +12,7 @@ class AIAnalyzer:
             raise ValueError("Gemini API 키가 필요합니다.")
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(
-            'gemini-1.5-pro-latest',
+            'gemini-2.5-flash',
             generation_config=genai.types.GenerationConfig(
                 temperature=0.3,  # 더 일관성 있는 응답을 위해 낮춤
                 top_p=0.8,
