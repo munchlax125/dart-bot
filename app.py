@@ -1,8 +1,3 @@
-# app.py - 2024년 데이터 지원 완전 버전
-"""
-메인 Flask 애플리케이션. 세션 기반으로 상태를 관리합니다.
-개선사항: 로깅, 환경변수 검증, 에러 처리 강화, 보안 개선, 2024년 데이터 지원
-"""
 from flask import Flask, render_template, request, jsonify, session
 import os
 import logging
